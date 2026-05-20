@@ -68,7 +68,7 @@ Each plugin in `AnalysisPlugins` is compiled as a **separate shared library** an
 
 ## Build
 
-<<<<<<< HEAD
+
 **Standard:** C++11 
 
 Requires [ROOT 6.38.04](https://root.cern) and a C++11-compatible compiler.
