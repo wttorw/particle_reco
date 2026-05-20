@@ -71,7 +71,7 @@ Each plugin in `AnalysisPlugins` is compiled as a **separate shared library** an
 **Standard:** C++11 (HEP ecosystem convention)
 
 Requires [ROOT 6.38.04](https://root.cern) and a C++11-compatible compiler.
-
+#Use ./compile bash script or :
 ```bash
 # Source ROOT environment first
 source <root_install_dir>/bin/thisroot.sh
@@ -85,7 +85,7 @@ cd ../AnalysisPlugins && make
 # Make libraries discoverable at runtime
 export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}":"
 ```
-# Or simply use ./compile
+
 ---
 
 ## Synopsis
