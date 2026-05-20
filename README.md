@@ -85,7 +85,7 @@ cd ../AnalysisPlugins && make
 # Make libraries discoverable at runtime
 export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}":"
 ```
-
+# Or simply use ./compile
 ---
 
 ## Synopsis
