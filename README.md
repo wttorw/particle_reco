@@ -68,12 +68,19 @@ Each plugin in `AnalysisPlugins` is compiled as a **separate shared library** an
 
 ## Build
 
+<<<<<<< HEAD
 **Standard:** C++11 
 
 Requires [ROOT 6.38.04](https://root.cern) and a C++11-compatible compiler.
 
 Use ./compile bash script or :
 
+=======
+**Standard:** C++11 (HEP ecosystem convention)
+
+Requires [ROOT 6.38.04](https://root.cern) and a C++11-compatible compiler.
+
+>>>>>>> cad7d61 (uplodad codebase)
 ```bash
 # Source ROOT environment first
 source <root_install_dir>/bin/thisroot.sh
@@ -111,15 +118,24 @@ export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}":"
 
 ---
 
+<<<<<<< HEAD
 ## Other info:
+=======
+## What's interesting from a software perspective
+>>>>>>> cad7d61 (uplodad codebase)
 
 - **Decoupled pipeline** — the event source, reconstruction, and analysis layers have no direct dependencies on each other; communication goes entirely through a typed Dispatcher
 - **Two observer variants** — the framework implements both an `ActiveObserver`, which processes every event immediately, and a `LazyObserver`, which defers computation until its result is actually requested. `ParticleReco` and `ProperTime` are lazy: they receive the event notification but only run the reconstruction when a downstream consumer calls `par_mass()` or `decayTime()`. This avoids redundant computation when multiple analyzers share the same reconstruction result
 - **Plugin architecture** — each analyzer in `AnalysisPlugins` compiles to its own shared library. Adding a new analyzer requires no changes to the core framework, only a new class and a one-line static self-registration
 - **Layered package design** — the four packages have a strict one-way dependency: `AnalysisPlugins` → `AnalysisObjects` → `AnalysisUtilities` → `AnalysisFramework`, with no circular dependencies
 - **Separation of concerns** — data reading, physics reconstruction, statistical fitting, and output are all independent modules
+<<<<<<< HEAD
 - **Deliberate C++11 memory model** — the codebase uses raw pointers and manual heap allocation throughout, following the HEP (High Energy Physics) community standard. Copy constructors and assignment operators are explicitly deleted everywhere to prevent accidental copies and make ownership unambiguous
 
+=======
+- **Deliberate C++11 memory model** — the codebase uses raw pointers and manual heap allocation throughout, following the HEP (High Energy Physics) community standard. This is an intentional choice: HEP frameworks like ROOT and Geant4 are built around this model, so compatibility and consistency with the ecosystem take priority over modern smart pointer conventions. Copy constructors and assignment operators are explicitly deleted everywhere to prevent accidental copies and make ownership unambiguous
+- **No framework magic** — everything is standard C++11 with ROOT only used for histogram output
+>>>>>>> cad7d61 (uplodad codebase)
 
 ---
 
