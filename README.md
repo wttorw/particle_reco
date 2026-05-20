@@ -1,6 +1,6 @@
 # Particle Physics Reconstruction
 
-A C++ data analysis framework that reconstructs particle decay events, fits statistical distributions, and outputs results to ROOT histograms. Built as part of a university physics computing course.
+A C++ data analysis framework that reconstructs particle decay events, fits statistical distributions, and outputs results to ROOT histograms. Built as part of a @unipd physics object oriented programming course. 
 
 The physics domain is particle decay, but the engineering focus is on **clean architecture**, **design patterns**, and **handling large volumes of structured data**.
 
