@@ -1,94 +1,83 @@
 #!/bin/sh
 
-export PATH=${HOME}
-export UTIL=${PATH}
+# build the whole project: three core libraries, one library per plugin,
+# and one executable per combination of analyzers.
+# ROOT must be set up first: source <root_install_dir>/bin/thisroot.sh
+
 cd `dirname $0`
-export ANALYSIS_PATH=${PATH}
+export ANALYSIS_PATH=`pwd`
+export UTIL=${ANALYSIS_PATH}
+
+export CXXFLAGS="-std=c++11 -Wall -fPIC -I. -I ${UTIL} -I ${ANALYSIS_PATH}"
+
+# embed the library location in the executables, so that the analyzer
+# libraries are found without setting LD_LIBRARY_PATH.
+# $ORIGIN is resolved at run time as the directory of the executable
+# itself: it must reach the linker verbatim, hence the single quotes.
+RPATH='-Wl,-rpath,$ORIGIN' 
 
 #####################################################################
+# core libraries
+#####################################################################
 
-export LIB_NAME=AnalysisFramework
-echo "compile " ${LIB_NAME}
-cd ${ANALYSIS_PATH}/${LIB_NAME}
-rm -f ${ANALYSIS_PATH}/lib${LIB_NAME}.so
-c++ -Wall -fPIC -shared -I. -I ${UTIL} -I ${ANALYSIS_PATH} \
--o ${ANALYSIS_PATH}/lib${LIB_NAME}.so *.cc
+for LIB_NAME in AnalysisFramework AnalysisObjects AnalysisUtilities ; do
+  echo "compile " ${LIB_NAME}
+  cd ${ANALYSIS_PATH}/${LIB_NAME}
+  rm -f ${ANALYSIS_PATH}/lib${LIB_NAME}.so
+  c++ ${CXXFLAGS} -shared \
+  -o ${ANALYSIS_PATH}/lib${LIB_NAME}.so *.cc                    || exit 1
+done
 
-export LIB_NAME=AnalysisObjects
-echo "compile " ${LIB_NAME}
-cd ${ANALYSIS_PATH}/${LIB_NAME}
-rm -f ${ANALYSIS_PATH}/lib${LIB_NAME}.so
-c++ -Wall -fPIC -shared -I. -I ${UTIL} -I ${ANALYSIS_PATH} \
--o ${ANALYSIS_PATH}/lib${LIB_NAME}.so *.cc
-
-export LIB_NAME=AnalysisUtilities
-echo "compile " ${LIB_NAME}
-cd ${ANALYSIS_PATH}/${LIB_NAME}
-rm -f ${ANALYSIS_PATH}/lib${LIB_NAME}.so
-c++ -Wall -fPIC -shared -I. -I ${UTIL} -I ${ANALYSIS_PATH} \
--o ${ANALYSIS_PATH}/lib${LIB_NAME}.so *.cc
-
+#####################################################################
+# analyzer plugins, one shared library each
 #####################################################################
 
 cd ${ANALYSIS_PATH}/AnalysisPlugins
 
-export LIB_NAME=EventDump
-echo "compile " ${LIB_NAME}
-rm -f ${ANALYSIS_PATH}/lib${LIB_NAME}.so
-c++ -Wall -fPIC -shared -I. -I ${UTIL} -I ${ANALYSIS_PATH} \
--o ${ANALYSIS_PATH}/lib${LIB_NAME}.so ${LIB_NAME}.cc
+echo "compile  EventDump"
+rm -f ${ANALYSIS_PATH}/libEventDump.so
+c++ ${CXXFLAGS} -shared \
+-o ${ANALYSIS_PATH}/libEventDump.so EventDump.cc                 || exit 1
 
-export LIB_NAME=ParticleLifetime
-echo "compile " ${LIB_NAME}
-rm -f ${ANALYSIS_PATH}/lib${LIB_NAME}.so
-c++ -Wall -fPIC -shared -I. -I ${UTIL} -I ${ANALYSIS_PATH} \
-`root-config --cflags`                                              \
--o ${ANALYSIS_PATH}/lib${LIB_NAME}.so ${LIB_NAME}.cc
+for LIB_NAME in ParticleMass ParticleLifetime ; do
+  echo "compile " ${LIB_NAME}
+  rm -f ${ANALYSIS_PATH}/lib${LIB_NAME}.so
+  c++ ${CXXFLAGS} -shared `root-config --cflags` \
+  -o ${ANALYSIS_PATH}/lib${LIB_NAME}.so ${LIB_NAME}.cc           || exit 1
+done
 
-export LIB_NAME=ParticleMass
-echo "compile " ${LIB_NAME}
-rm -f ${ANALYSIS_PATH}/lib${LIB_NAME}.so
-c++ -Wall -fPIC -shared -I. -I ${UTIL} -I ${ANALYSIS_PATH} \
-`root-config --cflags`                                              \
--o ${ANALYSIS_PATH}/lib${LIB_NAME}.so ${LIB_NAME}.cc
-
-
-
+#####################################################################
+# executables: main lives in libAnalysisFramework.so, dum.cc is an
+# empty translation unit, so --no-as-needed is required to keep the
+# libraries linked in
 #####################################################################
 
 cd ${ANALYSIS_PATH}
 
-export EXE_NAME=runDump
-echo "compile " ${EXE_NAME}
-rm -f ${EXE_NAME}
-c++ -Wall -fPIC -I. -I ${ANALYSIS_PATH} -I ${UTIL}         \
--o ${EXE_NAME} dum.cc -L ${ANALYSIS_PATH} -Wl,--no-as-needed        \
--lAnalysisFramework -lAnalysisObjects -lAnalysisUtilities           \
--lEventDump
+export CORE_LIBS="-L ${ANALYSIS_PATH} -Wl,--no-as-needed \
+-lAnalysisFramework -lAnalysisObjects -lAnalysisUtilities"
 
-export EXE_NAME=runLife
-echo "compile " ${EXE_NAME}
-rm -f ${EXE_NAME}
-c++ -Wall -fPIC -I. -I ${ANALYSIS_PATH} -I ${UTIL}         \
--o ${EXE_NAME} dum.cc -L ${ANALYSIS_PATH} -Wl,--no-as-needed        \
--lAnalysisFramework -lAnalysisObjects -lAnalysisUtilities           \
--lParticleLifetime `root-config --libs`
+echo "compile  runDump"
+rm -f runDump
+c++ ${CXXFLAGS} -o runDump dum.cc ${RPATH} ${CORE_LIBS} \
+-lEventDump                                                      || exit 1
 
-export EXE_NAME=runPlot
-echo "compile " ${EXE_NAME}
-rm -f ${EXE_NAME}
-c++ -Wall -fPIC -I. -I ${ANALYSIS_PATH} -I ${UTIL}         \
--o ${EXE_NAME} dum.cc -L ${ANALYSIS_PATH} -Wl,--no-as-needed        \
--lAnalysisFramework -lAnalysisObjects -lAnalysisUtilities           \
--lParticleMass `root-config --libs`
+echo "compile  runPlot"
+rm -f runPlot
+c++ ${CXXFLAGS} -o runPlot dum.cc ${RPATH} ${CORE_LIBS} \
+-lParticleMass `root-config --libs`                              || exit 1
 
-export EXE_NAME=runAll
-echo "compile " ${EXE_NAME}
-rm -f ${EXE_NAME}
-c++ -Wall -fPIC -I. -I ${ANALYSIS_PATH} -I ${UTIL}         \
--o ${EXE_NAME} dum.cc -L ${ANALYSIS_PATH} -Wl,--no-as-needed        \
--lAnalysisFramework -lAnalysisObjects -lAnalysisUtilities           \
--lEventDump -lParticleMass -lParticleLifetime `root-config --libs`
+echo "compile  runLife"
+rm -f runLife
+c++ ${CXXFLAGS} -o runLife dum.cc ${RPATH} ${CORE_LIBS} \
+-lParticleLifetime `root-config --libs`                          || exit 1
 
+echo "compile  runAll"
+rm -f runAll
+c++ ${CXXFLAGS} -o runAll dum.cc ${RPATH} ${CORE_LIBS} \
+-lEventDump -lParticleMass -lParticleLifetime `root-config --libs` || exit 1
 
-export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}":."
+#####################################################################
+
+echo ""
+echo "done."
