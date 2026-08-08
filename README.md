@@ -1,129 +1,228 @@
 # Particle Reconstruction
 
-A C++ data analysis framework that reconstructs particle decay events, fits statistical distributions, and outputs results to ROOT histograms. Built as part of a @unipd physics object oriented programming course. 
+C++ framework for the analysis of neutral particle decays. Reads a stream of decay
+events, reconstructs each decay under two competing mass hypotheses, and measures the
+invariant mass and the mean proper lifetime of each species. Results are written to
+ROOT histograms.
 
-The physics domain is particle decay, but the engineering focus is on **clean architecture**, **design patterns**, and **handling large volumes of structured data**.
-
----
-
-## What it does
-
-The program reads a stream of particle collision events (from file or simulation), identifies which type of particle decayed in each event, and runs two independent analyses:
-
-- **Mass reconstruction** — computes the invariant mass of each event and accumulates mean and RMS statistics
-- **Lifetime fit** — collects decay times and fits an exponential lifetime via a log-likelihood scan, minimized with a quadratic fitter
-
-Results are printed to stdout and saved as ROOT histograms.
+Written for the Object-Oriented Programming course in Physics at @unipd.
+The `util/` directory was provided as course material.
 
 ---
 
-## Design patterns used
+## Physics
 
-| Pattern | Where |
-|---|---|
-| Singleton | `ParticleReco`, `ProperTime` — one shared reconstruction instance per run |
-| Active/Lazy Observer | Analyzers subscribe to the event stream; computation is either immediate or deferred until requested |
-| Abstract Factory | `AnalysisFactory`, `SourceFactory` — analyzers and data sources are registered and created by name at runtime |
-| Lazy evaluation | Results are only computed when first requested, then cached |
+Each event contains a decay vertex and its charged daughter tracks. Only two-track
+events with zero total charge are reconstructed; anything else is tagged `unknown`.
 
----
+Two decay hypotheses are tested per event:
 
-## Project structure
+| Hypothesis | Daughters | PDG mass (GeV/c²) |
+|---|---|---|
+| K⁰ | π⁺ π⁻ | 0.497611 |
+| Λ⁰ | p π⁻ | 1.115683 |
 
-The codebase is organized into four packages, each compiled into its own dynamic library:
+For each hypothesis the daughter energies are computed from the measured momenta and
+the assumed masses, and the invariant mass of the pair is reconstructed. The hypothesis
+whose invariant mass falls closer to its PDG value is assigned to the event.
+
+The proper decay time follows from the flight distance `d` between the origin and the
+decay vertex:
 
 ```
-.
-├── AnalysisFramework/          # Core event loop and infrastructure
-│   ├── main.cc
-│   ├── AnalysisInfo            # CLI argument parser
-│   ├── AnalysisSteering        # Base class for analyzers
-│   ├── AnalysisFactory         # Plugin-style abstract factory
-│   ├── SourceFactory           # Factory for event sources
-│   ├── Event                   # Data model for a single collision event
-│   ├── EventSource             # Abstract event loop
-│   ├── EventReadFromFile       # File-based event source
-│   └── EventSim                # Monte Carlo event generator
-│
-├── AnalysisUtilities/          # Stateless helpers and math tools
-│   ├── Constants               # Physical constants
-│   ├── Utilities               # Energy and invariant mass helpers
-│   └── QuadraticFitter         # Least-squares quadratic fitter
-│
-├── AnalysisObjects/            # Physics reconstruction and statistics
-│   ├── ParticleReco            # Reconstruction logic (Singleton + LazyObserver)
-│   ├── ProperTime              # Decay time calculation (Singleton + LazyObserver)
-│   ├── MassMean                # Running mean/RMS accumulator
-│   └── LifetimeFit             # Log-likelihood lifetime fitter
-│
-└── AnalysisPlugins/            # Analyzers, one dynamic library each
-    ├── EventDump               # Prints raw event content to stdout
-    ├── ParticleMass            # Mass analysis pipeline (ActiveObserver)
-    └── ParticleLifetime        # Lifetime analysis pipeline (ActiveObserver)
+t = d · m / (p · c)
 ```
 
-Each plugin in `AnalysisPlugins` is compiled as a **separate shared library** and loaded at runtime based on the command line arguments, so the executable itself has no compile-time dependency on any specific analyzer.
+
+Two independent measurements run over the event stream:
+
+- **Invariant mass** — running mean and RMS per species, over a configurable mass window.
+- **Lifetime** — decay times are collected per species and fitted to an exponential by
+  scanning the negative log-likelihood over a range of candidate lifetimes; the minimum
+  is located by fitting a parabola to the scan (`QuadraticFitter`).
+
+### Known limitation
+
+The Λ⁰ hypothesis assigns the proton mass to the positive track only, so Λ̄⁰ (p̄ π⁺) is
+not reconstructed correctly. The sample is assumed to contain particles, not
+antiparticles.
+
+---
+
+## Requirements
+
+- A C++11-compatible compiler
+- ROOT ([root.cern](https://root.cern)), *or* the `fakeROOT` stub bundled in `util/`
+
+`util/fakeROOT` provides minimal stand-ins for `TH1F`, `TFile` and `TDirectory`, enough
+to run the analysis and dump the histograms without a full ROOT installation. Install it
+with `util/fakeROOT/install` and source `util/fakeROOT/bin/thisroot.sh` instead of the
+real one.
 
 ---
 
 ## Build
 
+```bash
+source <root_install_dir>/bin/thisroot.sh
+./compile
+```
 
-**Standard:** C++11 
+The script builds three shared libraries (`libAnalysisFramework.so`,
+`libAnalysisUtilities.so`, `libAnalysisObjects.so`), one library per plugin, and four
+executables that differ only in which analyzers they link:
 
-Requires [ROOT 6.38.04](https://root.cern) and a C++11-compatible compiler.
+| Executable | Analyzers linked |
+|---|---|
+| `runDump` | `EventDump` |
+| `runPlot` | `ParticleMass` |
+| `runLife` | `ParticleLifetime` |
+| `runAll` | all three |
 
-Use ./compile bash script or :
+Plugins are loaded from the current directory, so:
 
 ```bash
-# Source ROOT environment first
-source <root_install_dir>/bin/thisroot.sh
-
-# Build all packages
-cd AnalysisFramework && make
-cd ../AnalysisUtilities && make
-cd ../AnalysisObjects && make
-cd ../AnalysisPlugins && make
-
-# Make libraries discoverable at runtime
-export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}":"
+export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:.
 ```
 
 ---
-
-## Synopsis
-
-```
-./analysis (input <file> | sim <N> [seed <N>]) [plot <file>] [lifetime <file>] [output <name>] [dump]
-```
 
 ## Usage
 
+```
+./runAll (input <file> | sim <N> [seed <N>]) [plot <file>] [lifetime <file>] [output <name>] [dump]
+```
+
+| Argument | Meaning |
+|---|---|
+| `input <file>` | Read events from file |
+| `sim <N>` | Generate `N` events with the built-in Monte Carlo |
+| `seed <N>` | RNG seed for `sim` |
+| `plot <file>` | Mass-analysis configuration (see below) |
+| `lifetime <file>` | Lifetime-fit configuration (see below) |
+| `output <name>` | ROOT output file, written as `<name>.root` (default `data.root`) |
+| `dump` | Print raw event content to stdout |
+
+Each analyzer is selected by the presence of its keyword: `plot` activates the mass
+analysis, `lifetime` the lifetime fit, `dump` the event dump. Omitting the keyword
+disables that analyzer.
+
 ```bash
-# Run on real data
-./analysis input data.txt plot mass.txt lifetime lifetime.txt output results
+# Full analysis on the bundled sample
+./runAll input particle_events.txt plot massRanges lifetime particleFitters output results
 
-# Run on simulated data (10000 events, seed 42)
-./analysis sim 10000 seed 42 plot mass.txt lifetime lifetime.txt output results
+# Simulated sample, 10000 events, fixed seed
+./runAll sim 10000 seed 42 plot massRanges lifetime particleFitters output results
 
-# Dump raw event content
-./analysis input data.txt dump
+# Inspect the input
+./runDump input particle_events.txt dump
 ```
 
 ---
 
-## Other info:
+## File formats
 
+### Event file
 
-- **Decoupled pipeline** — the event source, reconstruction, and analysis layers have no direct dependencies on each other; communication goes entirely through a typed Dispatcher
-- **Two observer variants** — the framework implements both an `ActiveObserver`, which processes every event immediately, and a `LazyObserver`, which defers computation until its result is actually requested. `ParticleReco` and `ProperTime` are lazy: they receive the event notification but only run the reconstruction when a downstream consumer calls `par_mass()` or `decayTime()`. This avoids redundant computation when multiple analyzers share the same reconstruction result
-- **Plugin architecture** — each analyzer in `AnalysisPlugins` compiles to its own shared library. Adding a new analyzer requires no changes to the core framework, only a new class and a one-line static self-registration
-- **Layered package design** — the four packages have a strict one-way dependency: `AnalysisPlugins` → `AnalysisObjects` → `AnalysisUtilities` → `AnalysisFramework`, with no circular dependencies
-- **Separation of concerns** — data reading, physics reconstruction, statistical fitting, and output are all independent modules
-- **Deliberate C++11 memory model** — the codebase uses raw pointers and manual heap allocation throughout, following the HEP (High Energy Physics) community standard. Copy constructors and assignment operators are explicitly deleted everywhere to prevent accidental copies and make ownership unambiguous
+Whitespace-separated, free-format. Per event, a header followed by one line per track:
+
+```
+<id> <x> <y> <z> <nTracks>
+<charge> <px> <py> <pz>
+...
+```
+
+Vertex coordinates in cm, momenta in GeV/c. `particle_events.txt` is a bundled sample.
+
+### Mass configuration (`plot`)
+
+One line per species — the mass window used both for the running statistics and for the
+histogram range:
+
+```
+<name> <massMin> <massMax>
+```
+
+See `massRanges`.
+
+### Lifetime configuration (`lifetime`)
+
+One line per species:
+
+```
+<name> <massMin> <massMax> <tMin> <tMax> <scanMin> <scanMax> <scanStep>
+```
+
+`massMin`/`massMax` select which events enter the fit, `tMin`/`tMax` set the histogram
+range in ps, and `scanMin`/`scanMax`/`scanStep` define the likelihood scan over the
+candidate lifetime. See `particleFitters`.
 
 ---
 
-## License
+## Project structure
 
-MIT
+```
+.
+├── AnalysisFramework/          # Event loop and infrastructure
+│   ├── AnalysisInfo            # Command line parser
+│   ├── AnalysisSteering        # Base class for analyzers
+│   ├── AnalysisFactory         # Analyzer factory
+│   ├── SourceFactory           # Event source factory
+│   ├── Event                   # Decay vertex + tracks
+│   ├── EventSource             # Abstract event loop
+│   ├── EventReadFromFile       # File-based source
+│   └── EventSim                # Monte Carlo generator
+│
+├── AnalysisUtilities/          # Stateless helpers
+│   ├── Constants               # Particle masses, c
+│   ├── Utilities               # Energy and invariant mass
+│   └── QuadraticFitter         # Least-squares parabola fit
+│
+├── AnalysisObjects/            # Reconstruction and statistics
+│   ├── ParticleReco            # Mass hypotheses, type assignment
+│   ├── ProperTime              # Decay time
+│   ├── MassMean                # Running mean/RMS
+│   └── LifetimeFit             # Log-likelihood lifetime fit
+│
+├── AnalysisPlugins/            # Analyzers, one library each
+│   ├── EventDump
+│   ├── ParticleMass
+│   └── ParticleLifetime
+│
+└── util/                       # Course material, not written by me
+    ├── include/                # Singleton, Dispatcher, Active/LazyObserver, Random
+    ├── fakeROOT/               # Minimal ROOT stand-in
+    └── src/random/             # Random number generators
+```
+
+Dependencies run one way, `AnalysisPlugins` → `AnalysisObjects` → `AnalysisUtilities` →
+`AnalysisFramework` → `util`, with no cycles.
+
+---
+
+## Design notes
+
+| Pattern | Where |
+|---|---|
+| Singleton | `ParticleReco`, `ProperTime` — one instance per run |
+| Abstract Factory | `AnalysisFactory`, `SourceFactory` — analyzers and sources created by name at runtime |
+| Observer (active) | Analyzers, via `AnalysisSteering`: process each event as dispatched |
+| Observer (lazy) | `ParticleReco`, `ProperTime`: reconstruction deferred until requested, then cached |
+
+**Dispatcher.** Event source, reconstruction and analyzers never reference each other;
+all communication goes through the typed dispatcher in `util/include`.
+
+**Lazy reconstruction.** `ParticleReco` and `ProperTime` receive the event notification
+but compute nothing until a consumer calls `par_mass()`, `par_energy()` or
+`decayTime()`; `check()` recomputes only when the event has changed. The mass and
+lifetime analyzers therefore share a single reconstruction per event, and `ProperTime`
+is itself a consumer of `ParticleReco`, so the chain resolves on demand.
+
+**Runtime plugin registration.** Each analyzer compiles to its own shared library and
+registers a concrete factory under a name (`"plot"`, `"lifetime"`, `"dump"`) through a
+static object constructed before `main`. The framework has no compile-time knowledge of
+any analyzer; adding one means a new class and one static declaration.
+
+**Memory model.** Raw pointers and manual heap allocation throughout, following HEP
+conventions and the C++11 target. Copy constructors and assignment operators are deleted
+so that ownership stays unambiguous.
